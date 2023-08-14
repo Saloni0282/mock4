@@ -7,15 +7,19 @@ const UserRouter = express.Router();
 
 UserRouter.post("/api/register", async (req, res) => {
     try {
+
+
         const { name, email, password } = req.body;
-        const userExist = await UserModel.findOne({ email });
+        const isUser = await UserModel.findOne({ email });
+        if (isUser) return res.status(201).json({ msg: "User already exists" });
 
-        if (userExist) {
-            return res.status(400).json({ msg: "User already exists" });
-        }
+        const hashedPass = await bcrypt.hash(password, 10);
+        const user = new UserModel({ username, email, password: hashedPass });
+        await user.save();
 
-        const hashedPassword = await bcrypt.hash(password, 8);
-        const user = new UserModel({ name, email, password: hashedPassword });
+        res.send(user)
+
+        
         await user.save();
 
         res.status(201).json({ msg: "New user registered successfully" });
@@ -26,26 +30,20 @@ UserRouter.post("/api/register", async (req, res) => {
 });
 
 UserRouter.post("/api/login", async (req, res) => {
+
     try {
-        const { email, password } = req.body
-        const user = await UserModel.findOne({ email })
-        console.log(user)
-        if (!user) {
-            return res.status(401).json({ message: "Invalid username Or password" })
-        }
-        const isPasswordMatch = await bcrypt.compare(password, user.password)
+        const { email, password } = req.body;
+        const user = await UserModel.findOne({ email });
+        if (!user) return res.status(404).send({ msg: "User not found" });
 
-        if (isPasswordMatch) {
-            const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
+        const isCorrect = await bcrypt.compare(password, user.password);
+        if (!isCorrect) return res.status(400).send({ msg: "Wrong credentials" });
 
-            res.status(200).json({ token });
-            
-        } else {
-            return res.status(201).json({ message: "Invalid username Or password" })
-        }
+        const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
+        return res.status(201).json({ msg: "Login Successful", token });
     } catch (error) {
-        console.error('Error logging in:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        console.log(error);
+        res.send({ msg: "Error while logging in" });
     }
 });
 
